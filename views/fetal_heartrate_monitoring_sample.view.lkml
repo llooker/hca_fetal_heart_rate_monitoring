@@ -4,11 +4,11 @@ view: fetal_heartrate_monitoring_sample {
 
 view: fetal_heartrate_monitoring_sample_pre {
   derived_table: {
-    publish_as_db_view: yes
+    # publish_as_db_view: yes
     datagroup_trigger: once_yearly
     sql:
     SELECT subjectid, datetime, datatype, MonitorID, sensortype, key, value
-    FROM `hca-data-sandbox.fetal_heartrate_monitoring.felal_heartrate_monitoring_sample`
+    FROM `hca-data-sandbox.fetal_heartrate.fetal_heartrate_monitoring`
     UNPIVOT(
       key for value in (
           data_value_1
@@ -254,6 +254,7 @@ view: fetal_heartrate_monitoring_sample_pre {
       )
     )
     ;;
+    # -- , key, value
   }
   dimension: subjectid {}
 }
