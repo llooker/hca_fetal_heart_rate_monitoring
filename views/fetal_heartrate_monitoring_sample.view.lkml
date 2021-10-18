@@ -1,5 +1,163 @@
 view: fetal_heartrate_monitoring_sample {
-  sql_table_name:  ;;
+  sql_table_name: `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre` ;;
+
+####################
+### Original Columns
+####################
+
+  dimension_group: measurement {
+    type: time
+    timeframes: [
+      raw,
+      millisecond250,
+      second,
+      minute,
+      minute3,
+      minute5,
+      minute15,
+      minute30,
+      time,
+      date
+    ]
+    sql: ${TABLE}.measurement_timestamp ;;
+  }
+
+  dimension: second10 {
+    group_label: "Measurement Date"
+    type: date_time
+    sql: cast(${measurement_minute} || ':' || floor(extract(second from ${measurement_raw}) / 10)*10 as datetime) ;;
+    #  ;;
+  }
+
+  dimension: datatype {
+    type: string
+    sql: ${TABLE}.datatype ;;
+  }
+
+  dimension: monitor_id {
+    type: string
+    sql: ${TABLE}.MonitorID ;;
+  }
+
+  dimension: sensor_type {
+    description:
+"External Fetal HR from Ultrasound
+FECG    Fetal heart rate from fetal ECG obtained with a scalp electrode
+Ext_MHR   Maternal heart rate from an external source (e.g. maternal SpO2 device)
+MECG    Maternal ECG
+TOCO    Uterine pressure from external sensor
+IUP     Intrauterine pressure sensor cathode
+INOP    Inoperable sensor (not receiving signal; attached to monitor but lying in the bed)
+No_Trans  Nothing plugged in receptacle on monitor "
+    type: string
+    sql: ${TABLE}.SensorType ;;
+  }
+
+  dimension: subject_id {
+    type: string
+    sql: ${TABLE}.SubjectID ;;
+  }
+
+  dimension: value {
+    type: string
+    sql: ${TABLE}.value ;;
+  }
+
+####################
+### Derived Columns
+####################
+
+####################
+### Measures
+####################
+
+  measure: average_mhr {
+    group_label: "Clinical Measurements"
+    label: "MHR (Maternal Heart Rate)"
+    description: "Average Maternal Heart Rate (BPM) measured"
+    type: average
+    sql: ${value} ;;
+    filters: [datatype: "MHR"]
+    value_format_name: decimal_1
+  }
+
+  measure: average_fhr {
+    group_label: "Clinical Measurements"
+    label: "FHR (Fetal Heart Rate)"
+    description: "Average Fetal Heart Rate (BPM) measured - striaght average of HR1, HR2; Goal: 110-160 BPM"
+    type: average
+    sql: ${value} ;;
+    filters: [datatype: "HR1,HR2"]
+    value_format_name: decimal_1
+  }
+
+  measure: average_ua {
+    group_label: "Clinical Measurements"
+    label: "UA (Uterine Pressure)"
+    description: "Average Uterine Pressure"
+    type: average
+    sql: ${value} ;;
+    filters: [datatype: "UA"]
+    value_format_name: decimal_1
+  }
+
+  measure: inop_error_measurements {
+    group_label: "Data Population Errors"
+    label: "# Error - Inoperable Sensor"
+    description: "# measurements (taken every 1/4 second) that the sensor was inoperable"
+    type: count
+    filters: [sensor_type: "INOP"]
+  }
+
+  measure: no_trans_error_measurements {
+    group_label: "Data Population Errors"
+    label: "# Error - No Transmission"
+    description: "# measurements (taken every 1/4 second) that the transmission failed"
+    type: count
+    filters: [sensor_type: "No_Trans"]
+  }
+
+  measure: total_error_measurements {
+    group_label: "Data Population Errors"
+    label: "# Error - Total"
+    description: "# measurements (taken every 1/4 second) that either sensor was inoperable or the transmission failed"
+    type: number
+    sql: ${inop_error_measurements} + ${no_trans_error_measurements} ;;
+  }
+
+  measure: total_measurements {
+    label: "# Measurements - Total"
+    description: "# measurements (taken every 1/4 second)"
+    type: count
+  }
+
+  measure: inop_error_percent {
+    group_label: "Data Population Errors"
+    label: "% Error - Inoperable Sensor"
+    description: "% measurements (taken every 1/4 second) that the sensor was inoperable"
+    type: number
+    sql: ${inop_error_measurements} / nullif(${total_measurements},0) ;;
+    value_format_name: percent_1
+  }
+
+  measure: no_trans_error_percent {
+    group_label: "Data Population Errors"
+    label: "% Error - No Transmission"
+    description: "% measurements (taken every 1/4 second) that the transmission failed"
+    type: number
+    sql: ${inop_error_measurements} / nullif(${total_measurements},0) ;;
+    value_format_name: percent_1
+  }
+
+  measure: percent_error_measurements {
+    group_label: "Data Population Errors"
+    label: "% Error - Total"
+    description: "% measurements (taken every 1/4 second) that either sensor was inoperable or the transmission failed"
+    type: number
+    sql: ${total_error_measurements} / nullif(${total_measurements},0) ;;
+    value_format_name: percent_1
+  }
+
 }
 
 view: fetal_heartrate_monitoring_sample_pre {
@@ -272,1249 +430,6 @@ view: fetal_heartrate_monitoring_sample_pre {
         FROM ${SQL_TABLE_NAME}
       ;;
     }
+  }
+  dimension: subjectid {}
 }
-dimension: subjectid {}
-}
-
-#   sql_table_name: `hca-data-sandbox.fetal_heartrate_monitoring.felal_heartrate_monitoring_sample`
-#     ;;
-
-#   dimension: data_type {
-#     type: string
-#     sql: ${TABLE}.DataType ;;
-#   }
-
-#   dimension: data_value_1 {
-#     type: number
-#     sql: ${TABLE}.data_value_1 ;;
-#   }
-
-#   dimension: data_value_10 {
-#     type: number
-#     sql: ${TABLE}.data_value_10 ;;
-#   }
-
-#   dimension: data_value_100 {
-#     type: number
-#     sql: ${TABLE}.data_value_100 ;;
-#   }
-
-#   dimension: data_value_101 {
-#     type: number
-#     sql: ${TABLE}.data_value_101 ;;
-#   }
-
-#   dimension: data_value_102 {
-#     type: number
-#     sql: ${TABLE}.data_value_102 ;;
-#   }
-
-#   dimension: data_value_103 {
-#     type: number
-#     sql: ${TABLE}.data_value_103 ;;
-#   }
-
-#   dimension: data_value_104 {
-#     type: number
-#     sql: ${TABLE}.data_value_104 ;;
-#   }
-
-#   dimension: data_value_105 {
-#     type: number
-#     sql: ${TABLE}.data_value_105 ;;
-#   }
-
-#   dimension: data_value_106 {
-#     type: number
-#     sql: ${TABLE}.data_value_106 ;;
-#   }
-
-#   dimension: data_value_107 {
-#     type: number
-#     sql: ${TABLE}.data_value_107 ;;
-#   }
-
-#   dimension: data_value_108 {
-#     type: number
-#     sql: ${TABLE}.data_value_108 ;;
-#   }
-
-#   dimension: data_value_109 {
-#     type: number
-#     sql: ${TABLE}.data_value_109 ;;
-#   }
-
-#   dimension: data_value_11 {
-#     type: number
-#     sql: ${TABLE}.data_value_11 ;;
-#   }
-
-#   dimension: data_value_110 {
-#     type: number
-#     sql: ${TABLE}.data_value_110 ;;
-#   }
-
-#   dimension: data_value_111 {
-#     type: number
-#     sql: ${TABLE}.data_value_111 ;;
-#   }
-
-#   dimension: data_value_112 {
-#     type: number
-#     sql: ${TABLE}.data_value_112 ;;
-#   }
-
-#   dimension: data_value_113 {
-#     type: number
-#     sql: ${TABLE}.data_value_113 ;;
-#   }
-
-#   dimension: data_value_114 {
-#     type: number
-#     sql: ${TABLE}.data_value_114 ;;
-#   }
-
-#   dimension: data_value_115 {
-#     type: number
-#     sql: ${TABLE}.data_value_115 ;;
-#   }
-
-#   dimension: data_value_116 {
-#     type: number
-#     sql: ${TABLE}.data_value_116 ;;
-#   }
-
-#   dimension: data_value_117 {
-#     type: number
-#     sql: ${TABLE}.data_value_117 ;;
-#   }
-
-#   dimension: data_value_118 {
-#     type: number
-#     sql: ${TABLE}.data_value_118 ;;
-#   }
-
-#   dimension: data_value_119 {
-#     type: number
-#     sql: ${TABLE}.data_value_119 ;;
-#   }
-
-#   dimension: data_value_12 {
-#     type: number
-#     sql: ${TABLE}.data_value_12 ;;
-#   }
-
-#   dimension: data_value_120 {
-#     type: number
-#     sql: ${TABLE}.data_value_120 ;;
-#   }
-
-#   dimension: data_value_121 {
-#     type: number
-#     sql: ${TABLE}.data_value_121 ;;
-#   }
-
-#   dimension: data_value_122 {
-#     type: number
-#     sql: ${TABLE}.data_value_122 ;;
-#   }
-
-#   dimension: data_value_123 {
-#     type: number
-#     sql: ${TABLE}.data_value_123 ;;
-#   }
-
-#   dimension: data_value_124 {
-#     type: number
-#     sql: ${TABLE}.data_value_124 ;;
-#   }
-
-#   dimension: data_value_125 {
-#     type: number
-#     sql: ${TABLE}.data_value_125 ;;
-#   }
-
-#   dimension: data_value_126 {
-#     type: number
-#     sql: ${TABLE}.data_value_126 ;;
-#   }
-
-#   dimension: data_value_127 {
-#     type: number
-#     sql: ${TABLE}.data_value_127 ;;
-#   }
-
-#   dimension: data_value_128 {
-#     type: number
-#     sql: ${TABLE}.data_value_128 ;;
-#   }
-
-#   dimension: data_value_129 {
-#     type: number
-#     sql: ${TABLE}.data_value_129 ;;
-#   }
-
-#   dimension: data_value_13 {
-#     type: number
-#     sql: ${TABLE}.data_value_13 ;;
-#   }
-
-#   dimension: data_value_130 {
-#     type: number
-#     sql: ${TABLE}.data_value_130 ;;
-#   }
-
-#   dimension: data_value_131 {
-#     type: number
-#     sql: ${TABLE}.data_value_131 ;;
-#   }
-
-#   dimension: data_value_132 {
-#     type: number
-#     sql: ${TABLE}.data_value_132 ;;
-#   }
-
-#   dimension: data_value_133 {
-#     type: number
-#     sql: ${TABLE}.data_value_133 ;;
-#   }
-
-#   dimension: data_value_134 {
-#     type: number
-#     sql: ${TABLE}.data_value_134 ;;
-#   }
-
-#   dimension: data_value_135 {
-#     type: number
-#     sql: ${TABLE}.data_value_135 ;;
-#   }
-
-#   dimension: data_value_136 {
-#     type: number
-#     sql: ${TABLE}.data_value_136 ;;
-#   }
-
-#   dimension: data_value_137 {
-#     type: number
-#     sql: ${TABLE}.data_value_137 ;;
-#   }
-
-#   dimension: data_value_138 {
-#     type: number
-#     sql: ${TABLE}.data_value_138 ;;
-#   }
-
-#   dimension: data_value_139 {
-#     type: number
-#     sql: ${TABLE}.data_value_139 ;;
-#   }
-
-#   dimension: data_value_14 {
-#     type: number
-#     sql: ${TABLE}.data_value_14 ;;
-#   }
-
-#   dimension: data_value_140 {
-#     type: number
-#     sql: ${TABLE}.data_value_140 ;;
-#   }
-
-#   dimension: data_value_141 {
-#     type: number
-#     sql: ${TABLE}.data_value_141 ;;
-#   }
-
-#   dimension: data_value_142 {
-#     type: number
-#     sql: ${TABLE}.data_value_142 ;;
-#   }
-
-#   dimension: data_value_143 {
-#     type: number
-#     sql: ${TABLE}.data_value_143 ;;
-#   }
-
-#   dimension: data_value_144 {
-#     type: number
-#     sql: ${TABLE}.data_value_144 ;;
-#   }
-
-#   dimension: data_value_145 {
-#     type: number
-#     sql: ${TABLE}.data_value_145 ;;
-#   }
-
-#   dimension: data_value_146 {
-#     type: number
-#     sql: ${TABLE}.data_value_146 ;;
-#   }
-
-#   dimension: data_value_147 {
-#     type: number
-#     sql: ${TABLE}.data_value_147 ;;
-#   }
-
-#   dimension: data_value_148 {
-#     type: number
-#     sql: ${TABLE}.data_value_148 ;;
-#   }
-
-#   dimension: data_value_149 {
-#     type: number
-#     sql: ${TABLE}.data_value_149 ;;
-#   }
-
-#   dimension: data_value_15 {
-#     type: number
-#     sql: ${TABLE}.data_value_15 ;;
-#   }
-
-#   dimension: data_value_150 {
-#     type: number
-#     sql: ${TABLE}.data_value_150 ;;
-#   }
-
-#   dimension: data_value_151 {
-#     type: number
-#     sql: ${TABLE}.data_value_151 ;;
-#   }
-
-#   dimension: data_value_152 {
-#     type: number
-#     sql: ${TABLE}.data_value_152 ;;
-#   }
-
-#   dimension: data_value_153 {
-#     type: number
-#     sql: ${TABLE}.data_value_153 ;;
-#   }
-
-#   dimension: data_value_154 {
-#     type: number
-#     sql: ${TABLE}.data_value_154 ;;
-#   }
-
-#   dimension: data_value_155 {
-#     type: number
-#     sql: ${TABLE}.data_value_155 ;;
-#   }
-
-#   dimension: data_value_156 {
-#     type: number
-#     sql: ${TABLE}.data_value_156 ;;
-#   }
-
-#   dimension: data_value_157 {
-#     type: number
-#     sql: ${TABLE}.data_value_157 ;;
-#   }
-
-#   dimension: data_value_158 {
-#     type: number
-#     sql: ${TABLE}.data_value_158 ;;
-#   }
-
-#   dimension: data_value_159 {
-#     type: number
-#     sql: ${TABLE}.data_value_159 ;;
-#   }
-
-#   dimension: data_value_16 {
-#     type: number
-#     sql: ${TABLE}.data_value_16 ;;
-#   }
-
-#   dimension: data_value_160 {
-#     type: number
-#     sql: ${TABLE}.data_value_160 ;;
-#   }
-
-#   dimension: data_value_161 {
-#     type: number
-#     sql: ${TABLE}.data_value_161 ;;
-#   }
-
-#   dimension: data_value_162 {
-#     type: number
-#     sql: ${TABLE}.data_value_162 ;;
-#   }
-
-#   dimension: data_value_163 {
-#     type: number
-#     sql: ${TABLE}.data_value_163 ;;
-#   }
-
-#   dimension: data_value_164 {
-#     type: number
-#     sql: ${TABLE}.data_value_164 ;;
-#   }
-
-#   dimension: data_value_165 {
-#     type: number
-#     sql: ${TABLE}.data_value_165 ;;
-#   }
-
-#   dimension: data_value_166 {
-#     type: number
-#     sql: ${TABLE}.data_value_166 ;;
-#   }
-
-#   dimension: data_value_167 {
-#     type: number
-#     sql: ${TABLE}.data_value_167 ;;
-#   }
-
-#   dimension: data_value_168 {
-#     type: number
-#     sql: ${TABLE}.data_value_168 ;;
-#   }
-
-#   dimension: data_value_169 {
-#     type: number
-#     sql: ${TABLE}.data_value_169 ;;
-#   }
-
-#   dimension: data_value_17 {
-#     type: number
-#     sql: ${TABLE}.data_value_17 ;;
-#   }
-
-#   dimension: data_value_170 {
-#     type: number
-#     sql: ${TABLE}.data_value_170 ;;
-#   }
-
-#   dimension: data_value_171 {
-#     type: number
-#     sql: ${TABLE}.data_value_171 ;;
-#   }
-
-#   dimension: data_value_172 {
-#     type: number
-#     sql: ${TABLE}.data_value_172 ;;
-#   }
-
-#   dimension: data_value_173 {
-#     type: number
-#     sql: ${TABLE}.data_value_173 ;;
-#   }
-
-#   dimension: data_value_174 {
-#     type: number
-#     sql: ${TABLE}.data_value_174 ;;
-#   }
-
-#   dimension: data_value_175 {
-#     type: number
-#     sql: ${TABLE}.data_value_175 ;;
-#   }
-
-#   dimension: data_value_176 {
-#     type: number
-#     sql: ${TABLE}.data_value_176 ;;
-#   }
-
-#   dimension: data_value_177 {
-#     type: number
-#     sql: ${TABLE}.data_value_177 ;;
-#   }
-
-#   dimension: data_value_178 {
-#     type: number
-#     sql: ${TABLE}.data_value_178 ;;
-#   }
-
-#   dimension: data_value_179 {
-#     type: number
-#     sql: ${TABLE}.data_value_179 ;;
-#   }
-
-#   dimension: data_value_18 {
-#     type: number
-#     sql: ${TABLE}.data_value_18 ;;
-#   }
-
-#   dimension: data_value_180 {
-#     type: number
-#     sql: ${TABLE}.data_value_180 ;;
-#   }
-
-#   dimension: data_value_181 {
-#     type: number
-#     sql: ${TABLE}.data_value_181 ;;
-#   }
-
-#   dimension: data_value_182 {
-#     type: number
-#     sql: ${TABLE}.data_value_182 ;;
-#   }
-
-#   dimension: data_value_183 {
-#     type: number
-#     sql: ${TABLE}.data_value_183 ;;
-#   }
-
-#   dimension: data_value_184 {
-#     type: number
-#     sql: ${TABLE}.data_value_184 ;;
-#   }
-
-#   dimension: data_value_185 {
-#     type: number
-#     sql: ${TABLE}.data_value_185 ;;
-#   }
-
-#   dimension: data_value_186 {
-#     type: number
-#     sql: ${TABLE}.data_value_186 ;;
-#   }
-
-#   dimension: data_value_187 {
-#     type: number
-#     sql: ${TABLE}.data_value_187 ;;
-#   }
-
-#   dimension: data_value_188 {
-#     type: number
-#     sql: ${TABLE}.data_value_188 ;;
-#   }
-
-#   dimension: data_value_189 {
-#     type: number
-#     sql: ${TABLE}.data_value_189 ;;
-#   }
-
-#   dimension: data_value_19 {
-#     type: number
-#     sql: ${TABLE}.data_value_19 ;;
-#   }
-
-#   dimension: data_value_190 {
-#     type: number
-#     sql: ${TABLE}.data_value_190 ;;
-#   }
-
-#   dimension: data_value_191 {
-#     type: number
-#     sql: ${TABLE}.data_value_191 ;;
-#   }
-
-#   dimension: data_value_192 {
-#     type: number
-#     sql: ${TABLE}.data_value_192 ;;
-#   }
-
-#   dimension: data_value_193 {
-#     type: number
-#     sql: ${TABLE}.data_value_193 ;;
-#   }
-
-#   dimension: data_value_194 {
-#     type: number
-#     sql: ${TABLE}.data_value_194 ;;
-#   }
-
-#   dimension: data_value_195 {
-#     type: number
-#     sql: ${TABLE}.data_value_195 ;;
-#   }
-
-#   dimension: data_value_196 {
-#     type: number
-#     sql: ${TABLE}.data_value_196 ;;
-#   }
-
-#   dimension: data_value_197 {
-#     type: number
-#     sql: ${TABLE}.data_value_197 ;;
-#   }
-
-#   dimension: data_value_198 {
-#     type: number
-#     sql: ${TABLE}.data_value_198 ;;
-#   }
-
-#   dimension: data_value_199 {
-#     type: number
-#     sql: ${TABLE}.data_value_199 ;;
-#   }
-
-#   dimension: data_value_2 {
-#     type: number
-#     sql: ${TABLE}.data_value_2 ;;
-#   }
-
-#   dimension: data_value_20 {
-#     type: number
-#     sql: ${TABLE}.data_value_20 ;;
-#   }
-
-#   dimension: data_value_200 {
-#     type: number
-#     sql: ${TABLE}.data_value_200 ;;
-#   }
-
-#   dimension: data_value_201 {
-#     type: number
-#     sql: ${TABLE}.data_value_201 ;;
-#   }
-
-#   dimension: data_value_202 {
-#     type: number
-#     sql: ${TABLE}.data_value_202 ;;
-#   }
-
-#   dimension: data_value_203 {
-#     type: number
-#     sql: ${TABLE}.data_value_203 ;;
-#   }
-
-#   dimension: data_value_204 {
-#     type: number
-#     sql: ${TABLE}.data_value_204 ;;
-#   }
-
-#   dimension: data_value_205 {
-#     type: number
-#     sql: ${TABLE}.data_value_205 ;;
-#   }
-
-#   dimension: data_value_206 {
-#     type: number
-#     sql: ${TABLE}.data_value_206 ;;
-#   }
-
-#   dimension: data_value_207 {
-#     type: number
-#     sql: ${TABLE}.data_value_207 ;;
-#   }
-
-#   dimension: data_value_208 {
-#     type: number
-#     sql: ${TABLE}.data_value_208 ;;
-#   }
-
-#   dimension: data_value_209 {
-#     type: number
-#     sql: ${TABLE}.data_value_209 ;;
-#   }
-
-#   dimension: data_value_21 {
-#     type: number
-#     sql: ${TABLE}.data_value_21 ;;
-#   }
-
-#   dimension: data_value_210 {
-#     type: number
-#     sql: ${TABLE}.data_value_210 ;;
-#   }
-
-#   dimension: data_value_211 {
-#     type: number
-#     sql: ${TABLE}.data_value_211 ;;
-#   }
-
-#   dimension: data_value_212 {
-#     type: number
-#     sql: ${TABLE}.data_value_212 ;;
-#   }
-
-#   dimension: data_value_213 {
-#     type: number
-#     sql: ${TABLE}.data_value_213 ;;
-#   }
-
-#   dimension: data_value_214 {
-#     type: number
-#     sql: ${TABLE}.data_value_214 ;;
-#   }
-
-#   dimension: data_value_215 {
-#     type: number
-#     sql: ${TABLE}.data_value_215 ;;
-#   }
-
-#   dimension: data_value_216 {
-#     type: number
-#     sql: ${TABLE}.data_value_216 ;;
-#   }
-
-#   dimension: data_value_217 {
-#     type: number
-#     sql: ${TABLE}.data_value_217 ;;
-#   }
-
-#   dimension: data_value_218 {
-#     type: number
-#     sql: ${TABLE}.data_value_218 ;;
-#   }
-
-#   dimension: data_value_219 {
-#     type: number
-#     sql: ${TABLE}.data_value_219 ;;
-#   }
-
-#   dimension: data_value_22 {
-#     type: number
-#     sql: ${TABLE}.data_value_22 ;;
-#   }
-
-#   dimension: data_value_220 {
-#     type: number
-#     sql: ${TABLE}.data_value_220 ;;
-#   }
-
-#   dimension: data_value_221 {
-#     type: number
-#     sql: ${TABLE}.data_value_221 ;;
-#   }
-
-#   dimension: data_value_222 {
-#     type: number
-#     sql: ${TABLE}.data_value_222 ;;
-#   }
-
-#   dimension: data_value_223 {
-#     type: number
-#     sql: ${TABLE}.data_value_223 ;;
-#   }
-
-#   dimension: data_value_224 {
-#     type: number
-#     sql: ${TABLE}.data_value_224 ;;
-#   }
-
-#   dimension: data_value_225 {
-#     type: number
-#     sql: ${TABLE}.data_value_225 ;;
-#   }
-
-#   dimension: data_value_226 {
-#     type: number
-#     sql: ${TABLE}.data_value_226 ;;
-#   }
-
-#   dimension: data_value_227 {
-#     type: number
-#     sql: ${TABLE}.data_value_227 ;;
-#   }
-
-#   dimension: data_value_228 {
-#     type: number
-#     sql: ${TABLE}.data_value_228 ;;
-#   }
-
-#   dimension: data_value_229 {
-#     type: number
-#     sql: ${TABLE}.data_value_229 ;;
-#   }
-
-#   dimension: data_value_23 {
-#     type: number
-#     sql: ${TABLE}.data_value_23 ;;
-#   }
-
-#   dimension: data_value_230 {
-#     type: number
-#     sql: ${TABLE}.data_value_230 ;;
-#   }
-
-#   dimension: data_value_231 {
-#     type: number
-#     sql: ${TABLE}.data_value_231 ;;
-#   }
-
-#   dimension: data_value_232 {
-#     type: number
-#     sql: ${TABLE}.data_value_232 ;;
-#   }
-
-#   dimension: data_value_233 {
-#     type: number
-#     sql: ${TABLE}.data_value_233 ;;
-#   }
-
-#   dimension: data_value_234 {
-#     type: number
-#     sql: ${TABLE}.data_value_234 ;;
-#   }
-
-#   dimension: data_value_235 {
-#     type: number
-#     sql: ${TABLE}.data_value_235 ;;
-#   }
-
-#   dimension: data_value_236 {
-#     type: number
-#     sql: ${TABLE}.data_value_236 ;;
-#   }
-
-#   dimension: data_value_237 {
-#     type: number
-#     sql: ${TABLE}.data_value_237 ;;
-#   }
-
-#   dimension: data_value_238 {
-#     type: number
-#     sql: ${TABLE}.data_value_238 ;;
-#   }
-
-#   dimension: data_value_239 {
-#     type: number
-#     sql: ${TABLE}.data_value_239 ;;
-#   }
-
-#   dimension: data_value_24 {
-#     type: number
-#     sql: ${TABLE}.data_value_24 ;;
-#   }
-
-#   dimension: data_value_240 {
-#     type: number
-#     sql: ${TABLE}.data_value_240 ;;
-#   }
-
-#   dimension: data_value_25 {
-#     type: number
-#     sql: ${TABLE}.data_value_25 ;;
-#   }
-
-#   dimension: data_value_26 {
-#     type: number
-#     sql: ${TABLE}.data_value_26 ;;
-#   }
-
-#   dimension: data_value_27 {
-#     type: number
-#     sql: ${TABLE}.data_value_27 ;;
-#   }
-
-#   dimension: data_value_28 {
-#     type: number
-#     sql: ${TABLE}.data_value_28 ;;
-#   }
-
-#   dimension: data_value_29 {
-#     type: number
-#     sql: ${TABLE}.data_value_29 ;;
-#   }
-
-#   dimension: data_value_3 {
-#     type: number
-#     sql: ${TABLE}.data_value_3 ;;
-#   }
-
-#   dimension: data_value_30 {
-#     type: number
-#     sql: ${TABLE}.data_value_30 ;;
-#   }
-
-#   dimension: data_value_31 {
-#     type: number
-#     sql: ${TABLE}.data_value_31 ;;
-#   }
-
-#   dimension: data_value_32 {
-#     type: number
-#     sql: ${TABLE}.data_value_32 ;;
-#   }
-
-#   dimension: data_value_33 {
-#     type: number
-#     sql: ${TABLE}.data_value_33 ;;
-#   }
-
-#   dimension: data_value_34 {
-#     type: number
-#     sql: ${TABLE}.data_value_34 ;;
-#   }
-
-#   dimension: data_value_35 {
-#     type: number
-#     sql: ${TABLE}.data_value_35 ;;
-#   }
-
-#   dimension: data_value_36 {
-#     type: number
-#     sql: ${TABLE}.data_value_36 ;;
-#   }
-
-#   dimension: data_value_37 {
-#     type: number
-#     sql: ${TABLE}.data_value_37 ;;
-#   }
-
-#   dimension: data_value_38 {
-#     type: number
-#     sql: ${TABLE}.data_value_38 ;;
-#   }
-
-#   dimension: data_value_39 {
-#     type: number
-#     sql: ${TABLE}.data_value_39 ;;
-#   }
-
-#   dimension: data_value_4 {
-#     type: number
-#     sql: ${TABLE}.data_value_4 ;;
-#   }
-
-#   dimension: data_value_40 {
-#     type: number
-#     sql: ${TABLE}.data_value_40 ;;
-#   }
-
-#   dimension: data_value_41 {
-#     type: number
-#     sql: ${TABLE}.data_value_41 ;;
-#   }
-
-#   dimension: data_value_42 {
-#     type: number
-#     sql: ${TABLE}.data_value_42 ;;
-#   }
-
-#   dimension: data_value_43 {
-#     type: number
-#     sql: ${TABLE}.data_value_43 ;;
-#   }
-
-#   dimension: data_value_44 {
-#     type: number
-#     sql: ${TABLE}.data_value_44 ;;
-#   }
-
-#   dimension: data_value_45 {
-#     type: number
-#     sql: ${TABLE}.data_value_45 ;;
-#   }
-
-#   dimension: data_value_46 {
-#     type: number
-#     sql: ${TABLE}.data_value_46 ;;
-#   }
-
-#   dimension: data_value_47 {
-#     type: number
-#     sql: ${TABLE}.data_value_47 ;;
-#   }
-
-#   dimension: data_value_48 {
-#     type: number
-#     sql: ${TABLE}.data_value_48 ;;
-#   }
-
-#   dimension: data_value_49 {
-#     type: number
-#     sql: ${TABLE}.data_value_49 ;;
-#   }
-
-#   dimension: data_value_5 {
-#     type: number
-#     sql: ${TABLE}.data_value_5 ;;
-#   }
-
-#   dimension: data_value_50 {
-#     type: number
-#     sql: ${TABLE}.data_value_50 ;;
-#   }
-
-#   dimension: data_value_51 {
-#     type: number
-#     sql: ${TABLE}.data_value_51 ;;
-#   }
-
-#   dimension: data_value_52 {
-#     type: number
-#     sql: ${TABLE}.data_value_52 ;;
-#   }
-
-#   dimension: data_value_53 {
-#     type: number
-#     sql: ${TABLE}.data_value_53 ;;
-#   }
-
-#   dimension: data_value_54 {
-#     type: number
-#     sql: ${TABLE}.data_value_54 ;;
-#   }
-
-#   dimension: data_value_55 {
-#     type: number
-#     sql: ${TABLE}.data_value_55 ;;
-#   }
-
-#   dimension: data_value_56 {
-#     type: number
-#     sql: ${TABLE}.data_value_56 ;;
-#   }
-
-#   dimension: data_value_57 {
-#     type: number
-#     sql: ${TABLE}.data_value_57 ;;
-#   }
-
-#   dimension: data_value_58 {
-#     type: number
-#     sql: ${TABLE}.data_value_58 ;;
-#   }
-
-#   dimension: data_value_59 {
-#     type: number
-#     sql: ${TABLE}.data_value_59 ;;
-#   }
-
-#   dimension: data_value_6 {
-#     type: number
-#     sql: ${TABLE}.data_value_6 ;;
-#   }
-
-#   dimension: data_value_60 {
-#     type: number
-#     sql: ${TABLE}.data_value_60 ;;
-#   }
-
-#   dimension: data_value_61 {
-#     type: number
-#     sql: ${TABLE}.data_value_61 ;;
-#   }
-
-#   dimension: data_value_62 {
-#     type: number
-#     sql: ${TABLE}.data_value_62 ;;
-#   }
-
-#   dimension: data_value_63 {
-#     type: number
-#     sql: ${TABLE}.data_value_63 ;;
-#   }
-
-#   dimension: data_value_64 {
-#     type: number
-#     sql: ${TABLE}.data_value_64 ;;
-#   }
-
-#   dimension: data_value_65 {
-#     type: number
-#     sql: ${TABLE}.data_value_65 ;;
-#   }
-
-#   dimension: data_value_66 {
-#     type: number
-#     sql: ${TABLE}.data_value_66 ;;
-#   }
-
-#   dimension: data_value_67 {
-#     type: number
-#     sql: ${TABLE}.data_value_67 ;;
-#   }
-
-#   dimension: data_value_68 {
-#     type: number
-#     sql: ${TABLE}.data_value_68 ;;
-#   }
-
-#   dimension: data_value_69 {
-#     type: number
-#     sql: ${TABLE}.data_value_69 ;;
-#   }
-
-#   dimension: data_value_7 {
-#     type: number
-#     sql: ${TABLE}.data_value_7 ;;
-#   }
-
-#   dimension: data_value_70 {
-#     type: number
-#     sql: ${TABLE}.data_value_70 ;;
-#   }
-
-#   dimension: data_value_71 {
-#     type: number
-#     sql: ${TABLE}.data_value_71 ;;
-#   }
-
-#   dimension: data_value_72 {
-#     type: number
-#     sql: ${TABLE}.data_value_72 ;;
-#   }
-
-#   dimension: data_value_73 {
-#     type: number
-#     sql: ${TABLE}.data_value_73 ;;
-#   }
-
-#   dimension: data_value_74 {
-#     type: number
-#     sql: ${TABLE}.data_value_74 ;;
-#   }
-
-#   dimension: data_value_75 {
-#     type: number
-#     sql: ${TABLE}.data_value_75 ;;
-#   }
-
-#   dimension: data_value_76 {
-#     type: number
-#     sql: ${TABLE}.data_value_76 ;;
-#   }
-
-#   dimension: data_value_77 {
-#     type: number
-#     sql: ${TABLE}.data_value_77 ;;
-#   }
-
-#   dimension: data_value_78 {
-#     type: number
-#     sql: ${TABLE}.data_value_78 ;;
-#   }
-
-#   dimension: data_value_79 {
-#     type: number
-#     sql: ${TABLE}.data_value_79 ;;
-#   }
-
-#   dimension: data_value_8 {
-#     type: number
-#     sql: ${TABLE}.data_value_8 ;;
-#   }
-
-#   dimension: data_value_80 {
-#     type: number
-#     sql: ${TABLE}.data_value_80 ;;
-#   }
-
-#   dimension: data_value_81 {
-#     type: number
-#     sql: ${TABLE}.data_value_81 ;;
-#   }
-
-#   dimension: data_value_82 {
-#     type: number
-#     sql: ${TABLE}.data_value_82 ;;
-#   }
-
-#   dimension: data_value_83 {
-#     type: number
-#     sql: ${TABLE}.data_value_83 ;;
-#   }
-
-#   dimension: data_value_84 {
-#     type: number
-#     sql: ${TABLE}.data_value_84 ;;
-#   }
-
-#   dimension: data_value_85 {
-#     type: number
-#     sql: ${TABLE}.data_value_85 ;;
-#   }
-
-#   dimension: data_value_86 {
-#     type: number
-#     sql: ${TABLE}.data_value_86 ;;
-#   }
-
-#   dimension: data_value_87 {
-#     type: number
-#     sql: ${TABLE}.data_value_87 ;;
-#   }
-
-#   dimension: data_value_88 {
-#     type: number
-#     sql: ${TABLE}.data_value_88 ;;
-#   }
-
-#   dimension: data_value_89 {
-#     type: number
-#     sql: ${TABLE}.data_value_89 ;;
-#   }
-
-#   dimension: data_value_9 {
-#     type: number
-#     sql: ${TABLE}.data_value_9 ;;
-#   }
-
-#   dimension: data_value_90 {
-#     type: number
-#     sql: ${TABLE}.data_value_90 ;;
-#   }
-
-#   dimension: data_value_91 {
-#     type: number
-#     sql: ${TABLE}.data_value_91 ;;
-#   }
-
-#   dimension: data_value_92 {
-#     type: number
-#     sql: ${TABLE}.data_value_92 ;;
-#   }
-
-#   dimension: data_value_93 {
-#     type: number
-#     sql: ${TABLE}.data_value_93 ;;
-#   }
-
-#   dimension: data_value_94 {
-#     type: number
-#     sql: ${TABLE}.data_value_94 ;;
-#   }
-
-#   dimension: data_value_95 {
-#     type: number
-#     sql: ${TABLE}.data_value_95 ;;
-#   }
-
-#   dimension: data_value_96 {
-#     type: number
-#     sql: ${TABLE}.data_value_96 ;;
-#   }
-
-#   dimension: data_value_97 {
-#     type: number
-#     sql: ${TABLE}.data_value_97 ;;
-#   }
-
-#   dimension: data_value_98 {
-#     type: number
-#     sql: ${TABLE}.data_value_98 ;;
-#   }
-
-#   dimension: data_value_99 {
-#     type: number
-#     sql: ${TABLE}.data_value_99 ;;
-#   }
-
-#   dimension_group: datetime {
-#     type: time
-#     timeframes: [
-#       raw,
-#       time,
-#       date,
-#       week,
-#       month,
-#       quarter,
-#       year
-#     ]
-#     sql: ${TABLE}.Datetime ;;
-#   }
-
-#   dimension: monitor_id {
-#     type: string
-#     sql: ${TABLE}.MonitorID ;;
-#   }
-
-#   dimension: sensor_type {
-#     type: string
-#     sql: ${TABLE}.SensorType ;;
-#   }
-
-#   dimension: subject_id {
-#     type: string
-#     sql: ${TABLE}.SubjectID ;;
-#   }
-
-#   measure: count {
-#     type: count
-#     drill_fields: []
-#   }
-# }
