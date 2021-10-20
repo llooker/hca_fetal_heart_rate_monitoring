@@ -1,31 +1,5 @@
 view: fetal_heartrate_monitoring_sample {
-  sql_table_name:
-    {% if choose_table._parameter_value == 'real_sample_data_3_patients' %} `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre`
-    {% elsif choose_table._parameter_value == 'synthetic_data' %} `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
-    {% else %} `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre`
-    {% endif %}
-
-    ;;
-  # `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre` ;;
-  # `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
-
-####################
-### Choose Table
-####################
-
-  parameter: choose_table {
-    type: unquoted
-    default_value: "real_sample_data_3_patients"
-    allowed_value: {
-      label: "Real Data - 3 Patients"
-      value: "real_sample_data_3_patients"
-    }
-    allowed_value: {
-      label: "Synthetic Data"
-      value: "synthetic_data"
-    }
-  }
-
+  sql_table_name: `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre` ;;
 
 ####################
 ### Original Columns
@@ -466,7 +440,41 @@ view: fetal_heartrate_monitoring_sample_pre {
         SELECT subjectid, TIMESTAMP_ADD(TIMESTAMP_ADD(measurement_timestamp, INTERVAL seconds_add SECOND), INTERVAL milliseconds_add MILLISECOND) AS measurement_timestamp, datatype, MonitorID, sensortype, value
         FROM ${SQL_TABLE_NAME}
       ;;
+      sql_step:
+        CREATE OR REPLACE TABLE ${SQL_TABLE_NAME} AS
+        SELECT * FROM ${SQL_TABLE_NAME}
+        UNION ALL
+        -- See "sql_create_synthetic_patient.md" for script on generating one perfect patient
+        SELECT * FROM `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
+      ;;
     }
   }
   dimension: subjectid {}
 }
+
+
+# ####################
+# ### Choose Table
+# ####################
+
+#   parameter: choose_table {
+#     type: unquoted
+#     default_value: "real_sample_data_3_patients"
+#     allowed_value: {
+#       label: "Real Data - 3 Patients"
+#       value: "real_sample_data_3_patients"
+#     }
+#     allowed_value: {
+#       label: "Synthetic Data"
+#       value: "synthetic_data"
+#     }
+#   }
+
+  #   {% if choose_table._parameter_value == 'real_sample_data_3_patients' %} `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre`
+  #   {% elsif choose_table._parameter_value == 'synthetic_data' %} `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
+  #   {% else %} `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre`
+  #   {% endif %}
+
+  #   ;;
+  # # `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre` ;;
+  # # `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
