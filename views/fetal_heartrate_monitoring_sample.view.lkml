@@ -1,5 +1,31 @@
 view: fetal_heartrate_monitoring_sample {
-  sql_table_name: `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre` ;;
+  sql_table_name:
+    {% if choose_table._parameter_value == 'real_sample_data_3_patients' %} `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre`
+    {% elsif choose_table._parameter_value == 'synthetic_data' %} `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
+    {% else %} `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre`
+    {% endif %}
+
+    ;;
+  # `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre` ;;
+  # `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
+
+####################
+### Choose Table
+####################
+
+  parameter: choose_table {
+    type: unquoted
+    default_value: "real_sample_data_3_patients"
+    allowed_value: {
+      label: "Real Data - 3 Patients"
+      value: "real_sample_data_3_patients"
+    }
+    allowed_value: {
+      label: "Synthetic Data"
+      value: "synthetic_data"
+    }
+  }
+
 
 ####################
 ### Original Columns
@@ -73,7 +99,7 @@ No_Trans  Nothing plugged in receptacle on monitor "
 
   measure: average_mhr {
     group_label: "Clinical Measurements"
-    label: "MHR (Maternal Heart Rate)"
+    label: "Maternal HR"
     description: "Average Maternal Heart Rate (BPM) measured"
     type: average
     sql: ${value} ;;
@@ -83,7 +109,7 @@ No_Trans  Nothing plugged in receptacle on monitor "
 
   measure: average_fhr {
     group_label: "Clinical Measurements"
-    label: "FHR (Fetal Heart Rate)"
+    label: "Fetal HR"
     description: "Average Fetal Heart Rate (BPM) measured - striaght average of HR1, HR2; Goal: 110-160 BPM"
     type: average
     sql: ${value} ;;
@@ -93,13 +119,24 @@ No_Trans  Nothing plugged in receptacle on monitor "
 
   measure: average_ua {
     group_label: "Clinical Measurements"
-    label: "UA (Uterine Pressure)"
+    label: "Uterine Pressure"
     description: "Average Uterine Pressure"
     type: average
     sql: ${value} ;;
     filters: [datatype: "UA"]
     value_format_name: decimal_1
   }
+
+  measure: average_us {
+    group_label: "Clinical Measurements"
+    label: "Uterine Stimulation"
+    description: "Average Uterine Stimulation; note: this only exists in synthetic data"
+    type: average
+    sql: ${value} ;;
+    filters: [datatype: "US"]
+    value_format_name: decimal_1
+  }
+
 
   measure: inop_error_measurements {
     group_label: "Data Population Errors"
