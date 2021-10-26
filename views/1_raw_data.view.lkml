@@ -440,13 +440,13 @@ view: fetal_heartrate_monitoring_sample_pre {
         SELECT subjectid, TIMESTAMP_ADD(TIMESTAMP_ADD(measurement_timestamp, INTERVAL seconds_add SECOND), INTERVAL milliseconds_add MILLISECOND) AS measurement_timestamp, datatype, MonitorID, sensortype, value
         FROM ${SQL_TABLE_NAME}
       ;;
-      sql_step:
-        CREATE OR REPLACE TABLE ${SQL_TABLE_NAME} AS
-        SELECT * FROM ${SQL_TABLE_NAME}
-        UNION ALL
-        -- See "sql_create_synthetic_patient.md" for script on generating one perfect patient
-        SELECT * FROM `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
-      ;;
+      # sql_step:
+      #   CREATE OR REPLACE TABLE ${SQL_TABLE_NAME} AS
+      #   SELECT * FROM ${SQL_TABLE_NAME}
+      #   UNION ALL
+      #   -- See "sql_create_synthetic_patient.md" for script on generating one perfect patient
+      #   SELECT * FROM `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
+      # ;;
     }
   }
   dimension: subjectid {}
