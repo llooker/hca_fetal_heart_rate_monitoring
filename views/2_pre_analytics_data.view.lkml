@@ -12,12 +12,14 @@ view: fhm_summary {
 
 ## PK
   dimension: pk {
+    group_label: "Z - Building Blocks"
     primary_key: yes
     type: string
     sql: ${subjectid} || ' | ' || ${measurement_timestamp_raw} ;;
   }
 
   dimension_group: measurement_timestamp {
+    label: "*Measurement"
     type: time
     timeframes: [
       raw,
@@ -35,69 +37,82 @@ view: fhm_summary {
   }
 
   dimension: subjectid {
+    label: "*Subject Id"
     type: string
     sql: ${TABLE}.subjectid ;;
   }
 
 ### FHR
   dimension: fhr_value {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.fhr_value ;;
   }
 
   dimension: fhr_baseline {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.fhr_baseline ;;
   }
 
   dimension: fhr_variability {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.fhr_variability ;;
   }
 
   dimension: fhr_data_quality {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.fhr_data_quality ;;
   }
 
 ### UA
   dimension: ua_value {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.ua_value ;;
   }
 
   dimension: ua_baseline {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.ua_baseline ;;
   }
 
   dimension: ua_variability {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.ua_variability ;;
   }
 
   dimension: ua_data_quality {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.ua_data_quality ;;
   }
 
 ### US
   dimension: us_value {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.us_value ;;
   }
 
   dimension: us_baseline {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.us_baseline ;;
   }
 
   dimension: us_variability {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.us_variability ;;
   }
 
   dimension: us_data_quality {
+    group_label: "Z - Building Blocks"
     type: string
     sql: ${TABLE}.us_data_quality ;;
   }
@@ -171,45 +186,67 @@ view: fhm_summary {
   }
 
   measure: average_fhr {
-    group_label: "Clinical Measurements"
-    label: "Fetal HR"
+    group_label: "Fetal Heart Rate"
     description: "Average Fetal Heart Rate (BPM) measured - striaght average of HR1, HR2; Goal: 110-160 BPM"
     type: average
     sql: ${fhr_value} ;;
     value_format_name: decimal_1
   }
 
+  measure: average_baseline_fhr {
+    group_label: "Fetal Heart Rate"
+    type: average
+    sql: ${fhr_baseline} ;;
+  }
+
+  measure: average_variability_fhr {
+    group_label: "Fetal Heart Rate"
+    type: average
+    sql: ${fhr_variability} ;;
+    value_format_name: decimal_1
+  }
+
   measure: average_ua {
-    group_label: "Clinical Measurements"
-    label: "Uterine Pressure"
+    group_label: "Uterine Pressure"
     description: "Average Uterine Pressure"
     type: average
     sql: ${ua_value} ;;
     value_format_name: decimal_1
   }
 
+  measure: average_baseline_ua {
+    group_label: "Uterine Pressure"
+    type: average
+    sql: ${ua_baseline} ;;
+  }
+
+  measure: average_variability_ua {
+    group_label: "Uterine Pressure"
+    type: average
+    sql: ${ua_variability} ;;
+    value_format_name: decimal_1
+  }
+
   measure: average_us {
-    group_label: "Clinical Measurements"
-    label: "Uterine Stimulation"
+    group_label: "Uterine Stimulation"
     description: "Average Uterine Stimulation; note: this only exists in synthetic data"
     type: average
     sql: ${us_value} ;;
     value_format_name: decimal_1
   }
 
-  measure: average_baseline_fhr {
+  measure: average_baseline_us {
+    group_label: "Uterine Stimulation"
     type: average
-    sql: ${fhr_baseline} ;;
+    sql: ${us_baseline} ;;
   }
 
-  measure: average_variability_fhr {
-    group_label: "Clinical Measurements"
-    label: "Fetal HR - Variability"
+  measure: average_variability_us {
+    group_label: "Uterine Stimulation"
     type: average
-    sql: ${fhr_variability} ;;
+    sql: ${us_variability} ;;
     value_format_name: decimal_1
   }
-
 }
 
 view: measurements_last_60_min {
@@ -996,7 +1033,9 @@ view: fhm_summary_decelerations {
   }
 
   measure: sum_decelerations_now {
-    type: sum
+    view_label: "**FHM Summary"
+    group_label: "Happening Now"
+    type: max
     sql: ${count_decelerations_now} ;;
   }
 }
@@ -1027,7 +1066,9 @@ view: fhm_summary_accelerations {
   }
 
   measure: sum_accelerations_now {
-    type: sum
+    view_label: "**FHM Summary"
+    group_label: "Happening Now"
+    type: max
     sql: ${count_accelerations_now} ;;
   }
 }
@@ -1050,7 +1091,9 @@ view: fhm_summary_uterine_stimulation {
   }
 
   measure: sum_uterine_stimulations_now {
-    type: sum
+    view_label: "**FHM Summary"
+    group_label: "Happening Now"
+    type: max
     sql: ${count_uterine_stimulations_now} ;;
   }
 }
@@ -1073,7 +1116,9 @@ view: fhm_summary_contractions {
   }
 
   measure: sum_contractions_now {
-    type: sum
+    view_label: "**FHM Summary"
+    group_label: "Happening Now"
+    type: max
     sql: ${count_contractions_now} ;;
   }
 }
@@ -1087,6 +1132,7 @@ view: classification {
 ### 3 Category System
 
   dimension: is_category_1 {
+    group_label: "Z - Building Block"
     type: yesno
     sql:
           ${fhm_summary_kpis.average_baseline_fhr} BETWEEN 110 and 160
@@ -1100,16 +1146,19 @@ view: classification {
   }
 
   dimension: is_recurrent_late {
+    group_label: "Z - Building Block"
     type: yesno
     sql: ${fhm_summary_decelerations.count_late_decelerations} > 1  ;;
   }
 
   dimension: is_recurrent_variable {
+    group_label: "Z - Building Block"
     type: yesno
     sql: ${fhm_summary_decelerations.count_variable_decelerations} > 1  ;;
   }
 
   dimension: is_brady {
+    group_label: "Z - Building Block"
     type: yesno
     sql:
           ${fhm_summary_kpis.average_fhr} < 110
@@ -1118,6 +1167,7 @@ view: classification {
   }
 
   dimension: is_category_3 {
+    group_label: "Z - Building Block"
     type: yesno
     sql:
           ${fhm_summary_kpis.average_variability_fhr} is NULL
@@ -1142,6 +1192,7 @@ view: classification {
   }
 
   dimension: category_value {
+    group_label: "Z - Building Block"
     type: number
     sql: cast(right(${category_type},1) as int64) ;;
   }
@@ -1155,6 +1206,7 @@ view: classification {
 ### 5 Category System
 
   dimension: risk_score_tachycardia {
+    group_label: "Z - Building Block"
     type: number
     sql:
       case
@@ -1179,6 +1231,7 @@ view: classification {
   }
 
   dimension: risk_score_bradycardia {
+    group_label: "Z - Building Block (5 Tier)"
     type: number
     sql:
       case
@@ -1203,6 +1256,7 @@ view: classification {
   }
 
   dimension: risk_score_variability {
+    group_label: "Z - Building Block (5 Tier)"
     type: number
     sql:
       case
@@ -1223,6 +1277,7 @@ view: classification {
   }
 
   dimension: risk_score_decelerations {
+    group_label: "Z - Building Block (5 Tier)"
     type: number
     sql:
       case
@@ -1246,6 +1301,7 @@ view: classification {
   }
 
   dimension: risk_score_uterine_stimulation_without_acceleration {
+    group_label: "Z - Building Block (5 Tier)"
     type: number
     sql:
       case
@@ -1257,6 +1313,7 @@ view: classification {
   }
 
   dimension: risk_score_total {
+    group_label: "Z - Building Block (5 Tier)"
     type: number
     sql: ${risk_score_tachycardia} + ${risk_score_bradycardia} + ${risk_score_variability} + ${risk_score_decelerations} + ${risk_score_uterine_stimulation_without_acceleration} ;;
   }
@@ -1275,6 +1332,7 @@ view: classification {
   }
 
   dimension: category_type_5_viz {
+    group_label: "Viz"
     type: string
     sql: ${category_type_5} ;;
     html:
@@ -1296,6 +1354,7 @@ view: classification {
 
   # Note: this is a fake trend - hard-coded to say up or down...
   dimension: trending_viz {
+    group_label: "Viz"
     type: string
     sql: ${category_type_5} ;;
     html:
@@ -1316,6 +1375,7 @@ view: classification {
   }
 
   dimension: baseline_viz {
+    group_label: "Viz"
     type: number
     sql: ${fhm_summary_kpis.average_baseline_fhr} ;;
     value_format_name: decimal_1
@@ -1335,6 +1395,7 @@ view: classification {
   }
 
   dimension: variability_viz {
+    group_label: "Viz"
     type: number
     sql: coalesce(${fhm_summary_kpis.average_variability_fhr},0) ;;
     value_format_name: decimal_1
@@ -1354,6 +1415,7 @@ view: classification {
   }
 
   dimension: accelerations_viz {
+    group_label: "Viz"
     type: string
     sql:
       case
@@ -1372,6 +1434,7 @@ view: classification {
   }
 
   dimension: decelerations_viz {
+    group_label: "Viz"
     type: number
     sql: ${risk_score_decelerations} ;;
     html:

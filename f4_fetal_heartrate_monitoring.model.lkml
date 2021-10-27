@@ -6,7 +6,7 @@ include: "/views/*.view.lkml"                # include all views in the views/ f
 
 explore: fhm_summary {
   label: "(2) F4 - FHM - Summary Data (Advanced)"
-  view_label: "*FHM Summary"
+  view_label: "**FHM Summary"
   join: decelerations {
     view_label: "Deceleration"
     sql: LEFT JOIN UNNEST(${fhm_summary.decelerations}) as decelerations ;;
@@ -74,6 +74,7 @@ explore: fhm_summary {
   }
 
   join: classification {
+    view_label: "*Classification"
     sql:  ;;
     relationship: one_to_one
   }
