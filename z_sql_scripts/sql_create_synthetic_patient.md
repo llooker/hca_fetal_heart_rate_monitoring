@@ -9,7 +9,7 @@ Date Created: 2021-10-19
 Create baseline:
   - 3 hours of 140 bpm
   - Measurement every 1/4 second (43,200 rows total)
-  - 50 bpm variability
+  - 25 bpm variability
 **********************/
 
 -- Generate rows
@@ -58,13 +58,18 @@ FROM `hca-data-sandbox.fetal_heartrate.synthetic_2_add_in_baseline`
 WHERE row_num <= 43200
 ;
 
--- Add in variability - 50 bpm
+-- Add in variability - 25 bpm
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.synthetic_4_add_in_variability` AS
 SELECT
     patient_name
   , measurement_timestamp
-  , fetal_heart_rate + ((rand() - 0.5) * 50) as fetal_heart_rate
+  , case
+      when measurement_timestamp < '2021-06-15 09:36:00 UTC' then fetal_heart_rate + ((rand() - 0.5) * 50)
+      when measurement_timestamp < '2021-06-15 10:36:00 UTC' then fetal_heart_rate + ((rand() - 0.5) * 15)
+      when measurement_timestamp < '2021-06-15 11:36:00 UTC' then fetal_heart_rate + ((rand() - 0.5) * 5)
+      else fetal_heart_rate + ((rand() - 0.5) * 2)
+    end as fetal_heart_rate
   , uterine_pressure
   , uterine_stimulation
   , row_num
@@ -132,26 +137,33 @@ ORDER BY 2
 -- Every 18 minutes (9 min in), add in contraction for 6 minutes
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.synthetic_6_add_in_contractions_distinct_mintues` AS
-SELECT row_num, min(distinct_minute) as minute
-FROM
-(
-  SELECT
-    distinct_minute,
-    floor(row_num / 18) as row_num
+with contractions_by_row as (
+  SELECT row_num, min(distinct_minute) as minute
   FROM
   (
     SELECT
-          FORMAT_TIMESTAMP('%F %H:%M', timestamp_add(measurement_timestamp, interval 9 minute) ) as distinct_minute
-        , row_number() over (partition by 'x') as row_num
-    FROM `hca-data-sandbox.fetal_heartrate.synthetic_5_add_in_accelerations`
-    GROUP BY 1
-    ORDER BY 1
+      distinct_minute,
+      floor(row_num / 18) as row_num
+    FROM
+    (
+      SELECT
+            FORMAT_TIMESTAMP('%F %H:%M', timestamp_add(measurement_timestamp, interval 9 minute) ) as distinct_minute
+          , row_number() over (partition by 'x') as row_num
+      FROM `hca-data-sandbox.fetal_heartrate.synthetic_5_add_in_accelerations`
+      GROUP BY 1
+      ORDER BY 1
+    ) a
   ) a
-) a
-WHERE row_num not in (10)
-  --remove 10th contraction b/c after time
-GROUP BY 1
-ORDER BY 1
+  WHERE row_num not in (10)
+    --remove 10th contraction b/c after time
+  GROUP BY 1
+  ORDER BY 1
+)
+SELECT
+  row_num,
+  -- for 1st contraction, make it several minutes later
+  case when row_num = 0 then FORMAT_TIMESTAMP('%F %H:%M',timestamp_add(cast(minute || ':00.00 UTC' as timestamp), interval 5 minute)) else minute end as minute
+FROM contractions_by_row
 ;
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.synthetic_6_add_in_contractions` AS

@@ -37,6 +37,12 @@ explore: fhm_summary {
     relationship: one_to_many
   }
 
+  join: fhm_summary_kpis {
+    view_label: "FHM Summary KPIs (Summary)"
+    sql_on: ${fhm_summary.pk} = ${fhm_summary_kpis.pk} ;;
+    relationship: one_to_one
+  }
+
   join: fhm_summary_decelerations {
     view_label: "Deceleration (Summary)"
     sql_on: ${fhm_summary.pk} = ${fhm_summary_decelerations.pk} ;;
@@ -84,7 +90,7 @@ explore: fetal_heartrate_monitoring_sample_pre {
 
 ############ Caching Logic ############
 
-persist_with: once_weekly
+persist_with: new_data
 
 ### PDT Timeframes
 

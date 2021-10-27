@@ -28,6 +28,7 @@ view: fhm_summary {
       minute15,
       minute30,
       time,
+      hour_of_day,
       date
     ]
     sql: ${TABLE}.measurement_timestamp ;;
@@ -447,6 +448,11 @@ view: decelerations {
     sql: case when ${deceleration_seconds_to_peak} < 30 then 'Abrupt' else 'Gradual' end ;;
   }
 
+  dimension: is_prolonged {
+    type: yesno
+    sql: ${deceleration_length} BETWEEN 120 and 600 ;;
+  }
+
   dimension: deceleration_start_vs_contraction_start {
     type: string
     sql:
@@ -497,18 +503,27 @@ view: decelerations {
 ######################
 
   measure: count_early_decelerations {
-    type: count
+    type: count_distinct
+    sql: ${deceleration_start_raw} ;;
     filters: [is_in_last_30_min: "Yes", is_early_deceleration: "Yes"]
   }
 
   measure: count_late_decelerations {
-    type: count
+    type: count_distinct
+    sql: ${deceleration_start_raw} ;;
     filters: [is_in_last_30_min: "Yes", is_late_deceleration: "Yes"]
   }
 
   measure: count_variable_decelerations {
-    type: count
+    type: count_distinct
+    sql: ${deceleration_start_raw} ;;
     filters: [is_in_last_30_min: "Yes", is_variable_deceleration: "Yes"]
+  }
+
+  measure: count_prolonged_decelerations {
+    type: count_distinct
+    sql: ${deceleration_start_raw} ;;
+    filters: [is_in_last_30_min: "Yes", is_prolonged: "Yes"]
   }
 
   measure: count_decelerations_now {
@@ -653,12 +668,14 @@ view: acceleration {
   }
 
   measure: count_prolonged_acceleration {
-    type: count
+    type: count_distinct
+    sql: ${acceleration_start_raw} ;;
     filters: [is_in_last_30_min: "Yes", quick_vs_prolonged: "Prolonged"]
   }
 
   measure: count_reactivity {
-    type: count
+    type: count_distinct
+    sql: ${acceleration_start_raw} ;;
     filters: [is_in_last_30_min: "Yes", is_reactivity: "Yes"]
   }
 
@@ -790,7 +807,8 @@ view: uterine_stimulation {
 ######################
 
   measure: count_not_responding_to_stim {
-    type: count
+    type: count_distinct
+    sql: ${uterine_stimulation_start_raw} ;;
     filters: [is_in_last_30_min: "Yes", is_not_responding_to_stim: "Yes"]
   }
 
@@ -883,7 +901,8 @@ view: contractions {
 ######################
 
   measure: count_contractions {
-    type: count
+    type: count_distinct
+    sql: ${contraction_start_raw} ;;
     filters: [is_in_last_30_min: "Yes"]
   }
 
@@ -899,7 +918,7 @@ view: contractions {
 ### Part 2: NDTs to Describe Every Action
 ##############################
 
-view: fhm_summary_measurements_last_60_min {
+view: fhm_summary_kpis {
   derived_table: {
     datagroup_trigger: new_data
     explore_source: fhm_summary {
@@ -909,8 +928,6 @@ view: fhm_summary_measurements_last_60_min {
       column: average_ua {}
       column: average_baseline_fhr {}
       column: average_variability_fhr {}
-      column: percent_bradycardia_value { field: measurements_last_60_min.percent_bradycardia_value }
-      column: percent_tachycardia_value { field: measurements_last_60_min.percent_tachycardia_value }
     }
   }
   dimension: pk {}
@@ -929,6 +946,18 @@ view: fhm_summary_measurements_last_60_min {
   dimension: average_variability_fhr {
     type: number
   }
+}
+
+view: fhm_summary_measurements_last_60_min {
+  derived_table: {
+    datagroup_trigger: new_data
+    explore_source: fhm_summary {
+      column: pk {}
+      column: percent_bradycardia_value { field: measurements_last_60_min.percent_bradycardia_value }
+      column: percent_tachycardia_value { field: measurements_last_60_min.percent_tachycardia_value }
+    }
+  }
+  dimension: pk {}
   dimension: percent_bradycardia_value {
     type: number
   }
@@ -946,6 +975,7 @@ view: fhm_summary_decelerations {
       column: count_early_decelerations { field: decelerations.count_early_decelerations }
       column: count_variable_decelerations { field: decelerations.count_variable_decelerations }
       column: count_late_decelerations { field: decelerations.count_late_decelerations }
+      column: count_prolonged_decelerations { field: decelerations.count_prolonged_decelerations }
     }
   }
   dimension: pk {}
@@ -959,6 +989,9 @@ view: fhm_summary_decelerations {
     type: number
   }
   dimension: count_late_decelerations {
+    type: number
+  }
+  dimension: count_prolonged_decelerations {
     type: number
   }
 
@@ -1050,13 +1083,16 @@ view: fhm_summary_contractions {
 ##############################
 
 view: classification {
+
+### 3 Category System
+
   dimension: is_category_1 {
     type: yesno
     sql:
-          ${fhm_summary_measurements_last_60_min.average_baseline_fhr} BETWEEN 110 and 160
+          ${fhm_summary_kpis.average_baseline_fhr} BETWEEN 110 and 160
       AND ${fhm_summary_measurements_last_60_min.percent_bradycardia_value} < 0.2
       AND ${fhm_summary_measurements_last_60_min.percent_tachycardia_value} < 0.2
-      AND ${fhm_summary_measurements_last_60_min.average_variability_fhr} BETWEEN 6 and 25
+      AND ${fhm_summary_kpis.average_variability_fhr} BETWEEN 6 and 25
       AND ${fhm_summary_uterine_stimulation.count_not_responding_to_stim} = 0
       AND ${fhm_summary_decelerations.count_variable_decelerations} = 0
       AND ${fhm_summary_decelerations.count_late_decelerations} = 0
@@ -1076,7 +1112,7 @@ view: classification {
   dimension: is_brady {
     type: yesno
     sql:
-          ${fhm_summary_measurements_last_60_min.average_fhr} < 110
+          ${fhm_summary_kpis.average_fhr} < 110
       OR  ${fhm_summary_measurements_last_60_min.percent_bradycardia_value} > 0.6
     ;;
   }
@@ -1084,7 +1120,7 @@ view: classification {
   dimension: is_category_3 {
     type: yesno
     sql:
-          ${fhm_summary_measurements_last_60_min.average_variability_fhr} is NULL
+          ${fhm_summary_kpis.average_variability_fhr} is NULL
       AND
       (
             ${is_recurrent_late}
@@ -1114,5 +1150,240 @@ view: classification {
     type: max
     sql: ${category_value} ;;
     value_format_name: decimal_1
+  }
+
+### 5 Category System
+
+  dimension: risk_score_tachycardia {
+    type: number
+    sql:
+      case
+        when ${fhm_summary_kpis.average_baseline_fhr} < 160 then 0
+        when ${fhm_summary_kpis.average_baseline_fhr} < 170 then 2
+        when ${fhm_summary_kpis.average_baseline_fhr} < 175 then 5
+        when ${fhm_summary_kpis.average_baseline_fhr} < 180 then 10
+        when ${fhm_summary_kpis.average_baseline_fhr} < 190 then 20
+        when ${fhm_summary_kpis.average_baseline_fhr} < 200 then 50
+        else 100
+      end
+      +
+      case
+        when ${fhm_summary_measurements_last_60_min.percent_tachycardia_value} = 0 then 0
+        when ${fhm_summary_measurements_last_60_min.percent_tachycardia_value} < 0.2 then 2
+        when ${fhm_summary_measurements_last_60_min.percent_tachycardia_value} < 0.4 then 5
+        when ${fhm_summary_measurements_last_60_min.percent_tachycardia_value} < 0.6 then 10
+        when ${fhm_summary_measurements_last_60_min.percent_tachycardia_value} < 0.8 then 50
+        else 100
+      end
+      ;;
+  }
+
+  dimension: risk_score_bradycardia {
+    type: number
+    sql:
+      case
+        when ${fhm_summary_kpis.average_baseline_fhr} > 110 then 0
+        when ${fhm_summary_kpis.average_baseline_fhr} > 100 then 2
+        when ${fhm_summary_kpis.average_baseline_fhr} > 95 then 5
+        when ${fhm_summary_kpis.average_baseline_fhr} > 90 then 10
+        when ${fhm_summary_kpis.average_baseline_fhr} > 80 then 20
+        when ${fhm_summary_kpis.average_baseline_fhr} > 70 then 50
+        else 100
+      end
+      +
+      case
+        when ${fhm_summary_measurements_last_60_min.percent_bradycardia_value} = 0 then 0
+        when ${fhm_summary_measurements_last_60_min.percent_bradycardia_value} < 0.2 then 2
+        when ${fhm_summary_measurements_last_60_min.percent_bradycardia_value} < 0.4 then 5
+        when ${fhm_summary_measurements_last_60_min.percent_bradycardia_value} < 0.6 then 10
+        when ${fhm_summary_measurements_last_60_min.percent_bradycardia_value} < 0.8 then 50
+        else 100
+      end
+      ;;
+  }
+
+  dimension: risk_score_variability {
+    type: number
+    sql:
+      case
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 6 and 25 then 0
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 25 and 35 then 2
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 35 and 45 then 5
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 45 and 55 then 10
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 55 and 65 then 50
+        when ${fhm_summary_kpis.average_variability_fhr} > 65 then 100
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 5 and 6 then 2
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 4 and 5 then 5
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 2 and 4 then 10
+        when ${fhm_summary_kpis.average_variability_fhr} BETWEEN 0 and 2 then 50
+        when ${fhm_summary_kpis.average_variability_fhr} is null then 100
+        else 0
+      end
+    ;;
+  }
+
+  dimension: risk_score_decelerations {
+    type: number
+    sql:
+      case
+        when ${fhm_summary_decelerations.count_prolonged_decelerations} = 1 then 10
+        when ${fhm_summary_decelerations.count_prolonged_decelerations} > 1 then 50
+        else 0
+      end
+      +
+      case
+        when ${fhm_summary_decelerations.count_variable_decelerations} = 1 then 10
+        when ${fhm_summary_decelerations.count_variable_decelerations} > 1 then 50
+        else 0
+      end
+      +
+      case
+        when ${fhm_summary_decelerations.count_late_decelerations} = 1 then 50
+        when ${fhm_summary_decelerations.count_late_decelerations} > 1 then 100
+        else 0
+      end
+    ;;
+  }
+
+  dimension: risk_score_uterine_stimulation_without_acceleration {
+    type: number
+    sql:
+      case
+        when ${fhm_summary_uterine_stimulation.count_not_responding_to_stim} = 1 then 50
+        when ${fhm_summary_uterine_stimulation.count_not_responding_to_stim} > 1 then 100
+        else 0
+      end
+    ;;
+  }
+
+  dimension: risk_score_total {
+    type: number
+    sql: ${risk_score_tachycardia} + ${risk_score_bradycardia} + ${risk_score_variability} + ${risk_score_decelerations} + ${risk_score_uterine_stimulation_without_acceleration} ;;
+  }
+
+  dimension: category_type_5 {
+    type: string
+    sql:
+      case
+        when ${is_category_1} then 'Category 1'
+        when ${is_category_3} then 'Category 3'
+        when ${risk_score_total} > 100 then 'Category 2c'
+        when ${risk_score_total} > 50 then 'Category 2b'
+        else 'Category 2a'
+      end
+    ;;
+  }
+
+  dimension: category_type_5_viz {
+    type: string
+    sql: ${category_type_5} ;;
+    html:
+        {% if value == 'Category 1' %}
+          <p style="color: black; background-color: green; font-size:100%; text-align:center">{{ rendered_value }}</p>
+        {% elsif value == 'Category 2a' %}
+          <p style="color: black; background-color: yellow; font-size:100%; text-align:center">{{ rendered_value }}</p>
+        {% elsif value == 'Category 2b' %}
+          <p style="color: black; background-color: orange; font-size:100%; text-align:center">{{ rendered_value }}</p>
+        {% elsif value == 'Category 2c' %}
+          <p style="color: black; background-color: orange; font-size:100%; text-align:center">{{ rendered_value }}</p>
+        {% elsif value == 'Category 3' %}
+          <p style="color: black; background-color: red; font-size:100%; text-align:center">{{ rendered_value }}</p>
+        {% else %}
+          <p style="color: black; background-color: white; font-size:100%; text-align:center">{{ rendered_value }}</p>
+        {% endif %}
+    ;;
+  }
+
+  # Note: this is a fake trend - hard-coded to say up or down...
+  dimension: trending_viz {
+    type: string
+    sql: ${category_type_5} ;;
+    html:
+      {% if value == 'Category 1' %}
+        <p><img src="https://freesvg.org/img/arrowdownred.png" height=75 width=75></p>
+      {% elsif value == 'Category 2a' %}
+        <p><img src="https://freesvg.org/img/arrowdownred.png" height=75 width=75></p>
+      {% elsif value == 'Category 2b' %}
+        <p><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Green-Up-Arrow.svg/1200px-Green-Up-Arrow.svg.png" height=75 width=75></p>
+      {% elsif value == 'Category 2c' %}
+        <p><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Green-Up-Arrow.svg/1200px-Green-Up-Arrow.svg.png" height=75 width=75></p>
+      {% elsif value == 'Category 3' %}
+        <p><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Green-Up-Arrow.svg/1200px-Green-Up-Arrow.svg.png" height=75 width=75></p>
+      {% else %}
+        <p><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Green-Up-Arrow.svg/1200px-Green-Up-Arrow.svg.png" height=75 width=75></p>
+      {% endif %}
+    ;;
+  }
+
+  dimension: baseline_viz {
+    type: number
+    sql: ${fhm_summary_kpis.average_baseline_fhr} ;;
+    value_format_name: decimal_1
+    html:
+        {% if value > 110 and value < 160 %}
+          <p style="color: green;">{{ rendered_value }}</p>
+        {% elsif value > 90 and value < 110 %}
+          <p style="color: orange;">{{ rendered_value }}</p>
+        {% elsif value > 160 and value < 180 %}
+          <p style="color: orange;">{{ rendered_value }}</p>
+        {% elsif value < 90 or value > 180 %}
+          <p style="color: red;">{{ rendered_value }}</p>
+        {% else %}
+          <p style="color: black;">{{ rendered_value }}</p>
+        {% endif %}
+    ;;
+  }
+
+  dimension: variability_viz {
+    type: number
+    sql: coalesce(${fhm_summary_kpis.average_variability_fhr},0) ;;
+    value_format_name: decimal_1
+    html:
+        {% if value > 6 and value < 25 %}
+          <p style="color: green;">{{ rendered_value }}</p>
+        {% elsif value > 25 and value < 50 %}
+          <p style="color: orange;">{{ rendered_value }}</p>
+        {% elsif value > 1 and value < 6 %}
+          <p style="color: orange;">{{ rendered_value }}</p>
+        {% elsif value < 1 or value > 50 %}
+          <p style="color: red;">{{ rendered_value }}</p>
+        {% else %}
+          <p style="color: black;">{{ rendered_value }}</p>
+        {% endif %}
+    ;;
+  }
+
+  dimension: accelerations_viz {
+    type: string
+    sql:
+      case
+        when ${fhm_summary_uterine_stimulation.count_not_responding_to_stim} > 0 then 'Not Responding to Stimulation'
+        when ${fhm_summary_accelerations.count_abrupt_acceleration} + ${fhm_summary_accelerations.count_prolonged_acceleration} > 1 then 'Accelerations Present'
+        else 'Accelerations Absent'
+      end
+    ;;
+    html:
+        {% if value == 'Not Responding to Stimulation' %}
+          <p style="color: red;">{{ rendered_value }}</p>
+        {% else %}
+          <p style="color: black;">{{ rendered_value }}</p>
+        {% endif %}
+    ;;
+  }
+
+  dimension: decelerations_viz {
+    type: number
+    sql: ${risk_score_decelerations} ;;
+    html:
+        {% if value > 99 %}
+          <p style="color: red;">{{ fhm_summary_decelerations.count_prolonged_decelerations._rendered_value }} Prolonged, {{ fhm_summary_decelerations.count_variable_decelerations._rendered_value }} Variable, {{ fhm_summary_decelerations.count_late_decelerations._rendered_value }} Late </p>
+        {% elsif value > 49 %}
+          <p style="color: orange;">{{ fhm_summary_decelerations.count_prolonged_decelerations._rendered_value }} Prolonged, {{ fhm_summary_decelerations.count_variable_decelerations._rendered_value }} Variable, {{ fhm_summary_decelerations.count_late_decelerations._rendered_value }} Late </p>
+        {% elsif value > 9 %}
+          <p style="color: yellow;">{{ fhm_summary_decelerations.count_prolonged_decelerations._rendered_value }} Prolonged, {{ fhm_summary_decelerations.count_variable_decelerations._rendered_value }} Variable, {{ fhm_summary_decelerations.count_late_decelerations._rendered_value }} Late </p>
+        {% else %}
+          <p style="color: black;">{{ fhm_summary_decelerations.count_prolonged_decelerations._rendered_value }} Prolonged, {{ fhm_summary_decelerations.count_variable_decelerations._rendered_value }} Variable, {{ fhm_summary_decelerations.count_late_decelerations._rendered_value }} Late </p>
+        {% endif %}
+    ;;
   }
 }

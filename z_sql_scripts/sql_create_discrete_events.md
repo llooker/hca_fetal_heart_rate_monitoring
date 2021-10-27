@@ -9,6 +9,14 @@ Date Created: 2021-10-20
 0. Summarize by second5 to reduce data volume
 **********************/
 
+# Create a union all table
+
+CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_0_union_all_input_data` AS
+SELECT * FROM `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre`
+UNION ALL
+SELECT * FROM `hca-data-sandbox.fetal_heartrate.synthetic_10_change_to_schema`
+;
+
 # Note: this step should narrow down to just the last ~60 minutes or so during pipeline process in production
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_0_summarize_by_second5` AS
@@ -23,7 +31,7 @@ with pre_table as
     , avg(case when sensortype in ('INOP','No_Trans') then 1 else 0 end) as data_quality
     , avg(value) as value
   -- SELECT *
-  FROM `hca-data-sandbox.looker_scratch2.A3_f4_fetal_heartrate_monitoring_fetal_heartrate_monitoring_sample_pre` a
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_0_union_all_input_data` a
   GROUP BY 1,2,3
 )
 SELECT
@@ -47,7 +55,7 @@ I. Baseline: FHR, UA, US
 # Method:
   -- Take last 30 min of data
   -- Remove incomplete data
-  -- Remove top and bottom 10%
+  -- Remove top and bottom 25%
     # Note: this is a basic proxy for "excluding periods of marked FHR variability, periodic or episodic changes"
   -- Ensure at least 2 minutes of data
   -- Take the average value
@@ -74,8 +82,8 @@ SELECT
     *
     # Set bottom / top outliers
   , array_length(array_window) * 5 / 60 as count_minutes
-  , array_window[SAFE_OFFSET(cast(floor((array_length(array_window) / 100) * 10) as int64))] as bottom_outliers
-  , array_window[SAFE_OFFSET(cast(floor((array_length(array_window) / 100) * 90) as int64))] as top_outliers
+  , array_window[SAFE_OFFSET(cast(floor((array_length(array_window) / 100) * 25) as int64))] as bottom_outliers
+  , array_window[SAFE_OFFSET(cast(floor((array_length(array_window) / 100) * 75) as int64))] as top_outliers
 FROM array_summary_last_30_min a
 ),
 baseline_pre AS (
@@ -115,10 +123,10 @@ II. Variability: FHR
 **********************/
 
 # Granularity
-  -- By patient by every five seconds
+  -- By patient by quarter second
 
 # Method:
-  -- Take last 10 min of data
+  -- Take last 3 min of data
   -- Figure out # of cycles
      -- Take the difference between every point and the 5 seconds before it
      -- Every time number increases then decreases, that's a peak
@@ -126,18 +134,19 @@ II. Variability: FHR
      -- A full cycle is the # of times this changes / 2
   -- Figure out average amplitude of cycles
      -- Take difference between every peak and nadir / 2
-  -- If cycle length average for last 10 minutes is > 30 seconds, that's less than 2 cycles / minute --> no variability
+  -- If cycle length average is > 30 seconds, that's less than 2 cycles / minute --> no variability
       -- Otherwise, take the average amplitude for the past 10 minutes as variability
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min` AS
 with prior_value AS
 (
   SELECT
-      # Calculate absolute difference between every point and 5 seconds before it
+      # Calculate absolute difference between every point and quarter second
       *
     , LAST_VALUE(value) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) AS last_value
-  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_1_baseline_last_30_min`
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_0_union_all_input_data` a
 )
+# For every value is it increasing or decreasing
 , prior_value_change AS
 (
   SELECT
@@ -151,6 +160,7 @@ with prior_value AS
       end as change_type
   FROM prior_value
 )
+# For every PRIOR value is it increasing or decreasing
 , change_type_following as
 (
   SELECT
@@ -158,6 +168,7 @@ with prior_value AS
     , LAST_VALUE(change_type) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS change_type_after
   FROM prior_value_change
 )
+# If increasing then decreasing - peak; if decreasing then increasing - trough
 , change_wave_type as (
   SELECT
       *
@@ -168,6 +179,7 @@ with prior_value AS
       end as wave_type
   FROM change_type_following
 )
+# How long did it take for half cycle (peak to trough or trough to peak)? How long did it take for full cycle (peak to peak, trough to trough)? What was the value at each peak & trough?
 , wave_summary_pre as (
   SELECT
       *
@@ -177,8 +189,8 @@ with prior_value AS
     , LAG(value,2) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp) as last_full_cycle_value
   FROM change_wave_type
   WHERE wave_type is not null
-
 )
+# Cycle length: length of full cycle; amplitude: difference in half cycle / 2
 , wave_summary as
 (
   SELECT
@@ -187,22 +199,49 @@ with prior_value AS
     , datatype
     , value
     , timestamp_diff(measurement_timestamp, last_full_cycle_time, second) as cycle_length
-    , (value - last_half_cycle_value) / 2 as amplitude
+    , abs((value - last_half_cycle_value)) / 2 as amplitude
   FROM wave_summary_pre
 )
+# For all points in between peaks and troughs, insert in the summary from the latest peak or trough
 , fill_out_values_with_last_cycle as
 (
   SELECT
       a.*
     , last_value(b.cycle_length ignore nulls) OVER (PARTITION BY a.subjectid, a.datatype ORDER BY a.measurement_timestamp ROWS BETWEEN 300 PRECEDING AND 0 PRECEDING) AS cycle_length
     , last_value(b.amplitude ignore nulls) OVER (PARTITION BY a.subjectid, a.datatype ORDER BY a.measurement_timestamp ROWS BETWEEN 300 PRECEDING AND 0 PRECEDING) AS amplitude
-  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_1_baseline_last_30_min` a
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_0_union_all_input_data` a
   LEFT JOIN wave_summary b
     ON a.measurement_timestamp = b.measurement_timestamp
     AND a.subjectid = b.subjectid
     AND a.datatype = b.datatype
 )
-, average_last_10_minutes as
+# Then take average
+, aggregate_to_every_5_seconds as
+(
+  SELECT
+      subjectid
+    , cast((FORMAT_TIMESTAMP('%F %H:%M', a.measurement_timestamp )) || ':' || floor(extract(second from a.measurement_timestamp) / 5)*5 as timestamp) as measurement_timestamp
+    , datatype
+    , avg(cycle_length) as cycle_length
+    , avg(amplitude) as amplitude
+  FROM fill_out_values_with_last_cycle a
+  GROUP BY 1,2,3
+)
+# Then join it back
+, join_back_to_main_table as
+(
+  SELECT
+      a.*
+    , b.cycle_length
+    , b.amplitude
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_1_baseline_last_30_min` a
+  LEFT JOIN aggregate_to_every_5_seconds b
+    ON a.subjectid = b.subjectid
+    AND a.measurement_timestamp = b.measurement_timestamp
+    AND a.datatype = b.datatype
+)
+# Then take average of last rolling 3 minutes
+, average_last_3_minutes as
 (
   SELECT
       measurement_timestamp
@@ -211,10 +250,11 @@ with prior_value AS
     , data_quality
     , value
     , baseline
-    , avg(cycle_length) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 120 PRECEDING AND 0 PRECEDING) as cycle_length
-    , avg(amplitude) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 120 PRECEDING AND 0 PRECEDING) as amplitude
-  FROM fill_out_values_with_last_cycle
+    , avg(cycle_length) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 36 PRECEDING AND 0 PRECEDING) as cycle_length
+    , avg(amplitude) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 36 PRECEDING AND 0 PRECEDING) as amplitude
+  FROM join_back_to_main_table
 )
+# If cycle length > 30 seconds, it's null (docs say must have 2 cycles / minute); otherwise take average
 SELECT
     measurement_timestamp
   , subjectid
@@ -223,7 +263,7 @@ SELECT
   , value
   , baseline
   , case when cycle_length > 30 then NULL else amplitude end as variability
-FROM average_last_10_minutes
+FROM average_last_3_minutes
 ;
 
 /**********************
@@ -242,6 +282,7 @@ III. List out All Event:
   -- End: 0 x 15 - at least 15 seconds of back to baseline measurements
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_3_events_part1` AS
+# for every point compare value to baseline
 with is_event as (
   SELECT
   *
@@ -251,6 +292,7 @@ with is_event as (
   , case when datatype in ('US') and value - baseline >= 15 then 1.0 else 0 end as is_change4 -- Uterine Stim
   FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min`
 ),
+# for every point compare last 3 values (15 seconds) - all 3 must be greater than 15
 is_event_last_x_seconds as (
   SELECT
       *
@@ -260,6 +302,7 @@ is_event_last_x_seconds as (
     , AVG(is_change4) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 2 PRECEDING AND 0 PRECEDING) AS last_x_seconds4 -- Uterine Stim
   FROM is_event
 ),
+# create "period state": if all 3 of prior points is not greater than 15, it could end an event; if all 3 of prior points is greater than 15, it could start an event
 period_state_every_y_seconds as (
   SELECT
       *
@@ -269,6 +312,7 @@ period_state_every_y_seconds as (
     , case when last_x_seconds4 = 0 then 'End of Period' when last_x_seconds4 = 1 then 'Start of Period' else 'Unknown' end as period_state4 -- Uterine Stim
   FROM is_event_last_x_seconds
 ),
+# Take the period state for this records and the prior 5 seconds
 period_state_every_y_seconds_and_prior as (
 SELECT
     *
@@ -278,6 +322,7 @@ SELECT
   , coalesce(last_value(period_state4) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING),'Unknown') AS period_state_prior4 -- Uterine Stim
 FROM period_state_every_y_seconds
 ) ,
+# If Start of Period is involved in either, it's an event; if End of Period is involved in either, it's a not event
 period_state_every_y_seconds_and_prior_summary_pre as (
   SELECT
       *
@@ -323,6 +368,7 @@ period_state_every_y_seconds_and_prior_summary_pre as (
       end as is_event_pre4 -- Uterine Stim
   FROM period_state_every_y_seconds_and_prior
 ),
+# For anything that is NULL, take the last value
 period_state_every_y_seconds_and_prior_summary as (
 SELECT
     *
@@ -332,6 +378,7 @@ SELECT
   , last_value(is_event_pre4 IGNORE NULLS) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 200 PRECEDING AND 0 PRECEDING) as is_event4 -- Uterine Stim
 FROM period_state_every_y_seconds_and_prior_summary_pre
 ),
+# Now take the event state and the pior event state
 period_state_every_y_seconds_and_prior_summary_prior as (
   SELECT
       *
@@ -340,17 +387,34 @@ period_state_every_y_seconds_and_prior_summary_prior as (
     , last_value(is_event3 IGNORE NULLS) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) as is_event_prior3 -- Contract
     , last_value(is_event4 IGNORE NULLS) OVER (PARTITION BY subjectid, datatype ORDER BY measurement_timestamp ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING) as is_event_prior4 -- Uterine Stim
   FROM period_state_every_y_seconds_and_prior_summary
+),
+# If you go from "Not Event" to "Event" that's the start of the event
+# If you go from "Event" to "Not Event" that's the end of the event
+event_start_end_date_pre as (
+  SELECT
+      *
+    , case when is_event1 = 'Event' and is_event_prior1 = 'Not Event' then 'Event Start' when is_event1 = 'Not Event' and is_event_prior1 = 'Event' then 'Event End' end as event_start_end1 -- Dec
+    , case when is_event2 = 'Event' and is_event_prior2 = 'Not Event' then 'Event Start' when is_event2 = 'Not Event' and is_event_prior2 = 'Event' then 'Event End' end as event_start_end2 -- Acc
+    , case when is_event3 = 'Event' and is_event_prior3 = 'Not Event' then 'Event Start' when is_event3 = 'Not Event' and is_event_prior3 = 'Event' then 'Event End' end as event_start_end3 -- Contract
+    , case when is_event4 = 'Event' and is_event_prior4 = 'Not Event' then 'Event Start' when is_event4 = 'Not Event' and is_event_prior4 = 'Event' then 'Event End' end as event_start_end4 -- Uterine Stim
+  FROM period_state_every_y_seconds_and_prior_summary_prior
 )
+# Manually move back the event start by 15 seconds (I found that we start 15 seconds too late but end on time b/c we're waiting for 3 consecutive readings)
 SELECT
-    *
-  , case when is_event1 = 'Event' and is_event_prior1 = 'Not Event' then 'Event Start' when is_event1 = 'Not Event' and is_event_prior1 = 'Event' then 'Event End' end as event_start_end1 -- Dec
-  , case when is_event2 = 'Event' and is_event_prior2 = 'Not Event' then 'Event Start' when is_event2 = 'Not Event' and is_event_prior2 = 'Event' then 'Event End' end as event_start_end2 -- Acc
-  , case when is_event3 = 'Event' and is_event_prior3 = 'Not Event' then 'Event Start' when is_event3 = 'Not Event' and is_event_prior3 = 'Event' then 'Event End' end as event_start_end3 -- Contract
-  , case when is_event4 = 'Event' and is_event_prior4 = 'Not Event' then 'Event Start' when is_event4 = 'Not Event' and is_event_prior4 = 'Event' then 'Event End' end as event_start_end4 -- Uterine Stim
-FROM period_state_every_y_seconds_and_prior_summary_prior
+    a.* except (event_start_end1, event_start_end2, event_start_end3, event_start_end4)
+  , case when b.event_start_end1 = 'Event Start' then 'Event Start' when a.event_start_end1 = 'Event Start' then NULL else a.event_start_end1 end as event_start_end1
+  , case when b.event_start_end2 = 'Event Start' then 'Event Start' when a.event_start_end2 = 'Event Start' then NULL else a.event_start_end2 end as event_start_end2
+  , case when b.event_start_end3 = 'Event Start' then 'Event Start' when a.event_start_end3 = 'Event Start' then NULL else a.event_start_end3 end as event_start_end3
+  , case when b.event_start_end4 = 'Event Start' then 'Event Start' when a.event_start_end4 = 'Event Start' then NULL else a.event_start_end4 end as event_start_end4
+FROM event_start_end_date_pre a
+LEFT JOIN event_start_end_date_pre b
+  ON a.subjectid = b.subjectid
+  AND a.datatype = b.datatype
+  AND a.measurement_timestamp = timestamp_add(b.measurement_timestamp, interval -15 second)
 ;
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_3_events_part2` AS
+# Create an event ID for each distinct event
 with period_state_every_y_seconds_event_id as (
   SELECT
       a.*
@@ -359,6 +423,7 @@ with period_state_every_y_seconds_event_id as (
     , d.event_id as event_id3 -- Contract
     , e.event_id as event_id4 -- Uterine Stim
   FROM `hca-data-sandbox.fetal_heartrate.rules_classify_3_events_part1` a
+  # Event ID is based on the rank of each event start and event end
   LEFT JOIN
   (
     SELECT
@@ -444,6 +509,7 @@ with period_state_every_y_seconds_event_id as (
     AND a.subjectid = e.subjectid
     AND a.datatype = e.datatype
 ),
+# Then fill in all blank rows with the event ID if they occur between start and end
 pre_summary as (
   SELECT
         a.* except (event_id1, event_id2, event_id3, event_id4)
@@ -582,6 +648,7 @@ pre_summary as (
 ;
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_3_events_part3` AS
+# Create a table that draws out the start and end points of all 4 event types + event IDs
 SELECT
   distinct
     a.measurement_timestamp
@@ -641,6 +708,7 @@ IV. List out Event Summary: Decelerations
   -- amplitude
 
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_4_contraction` AS
+# Break out each event
 with contractions as
 (
   SELECT
@@ -653,6 +721,7 @@ with contractions as
   WHERE contraction_event_id is not null
   GROUP BY 1,2
 ),
+# Measure amplitude of event
 con_amplitude as
 (
   SELECT
@@ -666,6 +735,7 @@ con_amplitude as
   AND a.measurement_timestamp <= b.contraction_end_time
   GROUP BY 1,2
 ),
+# Measure how long it takes to reach peak
 con_first_peak as
 (
   SELECT
@@ -751,6 +821,7 @@ dec_first_peak as
   AND abs(a.value - a.baseline) >= c.amplitude
   GROUP BY 1,2
 ),
+# For decelerations and contractions, find the closest match
 cross_join_dec_con as
 (
   SELECT
@@ -795,6 +866,7 @@ dec_con_mapping as
     AND a.avg_time_diff = b.avg_time_diff
   GROUP BY 1,2
 ),
+# Write out stats on the match
 dec_con_ordering as
 (
   SELECT
@@ -819,6 +891,7 @@ dec_con_ordering as
     ON a.subjectid = d.subjectid
     AND b.deceleration_event_id = d.deceleration_event_id
 ),
+# Figure out how much overlap there was on match based on which started first and which ended first
 dec_con_ordering_type as
 (
   SELECT
@@ -1088,7 +1161,53 @@ us_acc_ordering_type as
 V. Combine into Summary Table with Structs
 **********************/
 
--- PK: by subject, by datatype, by every. 5seconds
+-- Pre table -- convert by subject by time by datatype to just by subject by time
+
+CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table_pre` AS
+# Pivot the table to have many more columns - instead of a PK of time, subject, and datatype, now the table PK is just time, subject
+SELECT distinct
+    a.measurement_timestamp
+  , a.subjectid
+  , b.value as fhr_value
+  , b.baseline as fhr_baseline
+  , b.variability as fhr_variability
+  , b.data_quality as fhr_data_quality
+  , c.value as ua_value
+  , c.baseline as ua_baseline
+  , c.variability as ua_variability
+  , c.data_quality as ua_data_quality
+  , d.value as us_value
+  , d.baseline as us_baseline
+  , d.variability as us_variability
+  , d.data_quality as us_data_quality
+FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min` a
+LEFT JOIN
+(
+  SELECT *
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min`
+  WHERE datatype in ('HR1','HR2')
+) b
+  ON a.measurement_timestamp = b.measurement_timestamp
+  AND a.subjectid = b.subjectid
+LEFT JOIN
+(
+  SELECT *
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min`
+  WHERE datatype in ('UA')
+) c
+  ON a.measurement_timestamp = c.measurement_timestamp
+  AND a.subjectid = c.subjectid
+LEFT JOIN
+(
+  SELECT *
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min`
+  WHERE datatype in ('US')
+) d
+  ON a.measurement_timestamp = d.measurement_timestamp
+  AND a.subjectid = d.subjectid
+;
+
+-- PK: by subject, by every 5 seconds
 -- Records for
   -- Baseline
   -- Variability
@@ -1102,7 +1221,9 @@ V. Combine into Summary Table with Structs
 CREATE OR REPLACE TABLE `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table` AS
 SELECT
     a.*
-  , ARRAY_AGG(struct(a.measurement_timestamp, a.value)) OVER (PARTITION BY a.subjectid, a.datatype ORDER BY a.measurement_timestamp ROWS BETWEEN 120 PRECEDING AND 0 FOLLOWING) as measurements_last_10_min
+# Create an array that has the last hour of measurements (in case you want to measure % values at Bradycardia or Tachycardia
+  , ARRAY_AGG(struct(a.measurement_timestamp, a.fhr_value)) OVER (PARTITION BY a.subjectid ORDER BY a.measurement_timestamp ROWS BETWEEN 720 PRECEDING AND 0 FOLLOWING) as measurements_last_60_min
+# Create an array of structs with a row for every deceleration in the past hour
   , ARRAY_AGG(
       struct(
           b.deceleration_start_time
@@ -1122,6 +1243,7 @@ SELECT
         , b.seconds_overlap
       )
     ) as decelerations
+# Same for contractions
   , ARRAY_AGG(
       struct(
           c.contraction_start_time
@@ -1132,6 +1254,7 @@ SELECT
         , c.contraction_seconds_to_peak
       )
     ) as contractions
+# Same for accelerations
   , ARRAY_AGG(
       struct(
           d.acceleration_start_time
@@ -1145,6 +1268,7 @@ SELECT
         , d.acceleration_seconds_to_peak
       )
     ) as acceleration
+# Same for uterine stimulation
   , ARRAY_AGG(
       struct(
           e.uterine_stimulation_start_time
@@ -1160,10 +1284,10 @@ SELECT
         , e.seconds_overlap
       )
     ) as uterine_stimulation
-FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min` a
+FROM `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table_pre` a
 LEFT JOIN
 (
-  SELECT
+  SELECT distinct
       a.measurement_timestamp
     , a.subjectid
     , b.deceleration_start_time
@@ -1181,7 +1305,7 @@ LEFT JOIN
     , b.peak_time_diff
     , b.type
     , b.seconds_overlap
-  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min` a
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table_pre` a
   CROSS JOIN `hca-data-sandbox.fetal_heartrate.rules_classify_4_deceleration` b
   WHERE a.subjectid = b.subjectid
   AND a.measurement_timestamp BETWEEN b.deceleration_start_time AND timestamp_add(b.deceleration_start_time, interval 60 minute)
@@ -1190,7 +1314,7 @@ LEFT JOIN
   AND a.subjectid = b.subjectid
 LEFT JOIN
 (
-  SELECT
+  SELECT distinct
       a.measurement_timestamp
     , a.subjectid
     , b.contraction_start_time
@@ -1199,7 +1323,7 @@ LEFT JOIN
     , b.amplitude as contraction_amplitude
     , b.first_peak as contraction_first_peak
     , b.seconds_to_peak as contraction_seconds_to_peak
-  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min` a
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table_pre` a
   CROSS JOIN `hca-data-sandbox.fetal_heartrate.rules_classify_4_contraction` b
   WHERE a.subjectid = b.subjectid
   AND a.measurement_timestamp BETWEEN b.contraction_start_time AND timestamp_add(b.contraction_start_time, interval 60 minute)
@@ -1208,7 +1332,7 @@ LEFT JOIN
   AND a.subjectid = c.subjectid
 LEFT JOIN
 (
-  SELECT
+  SELECT distinct
       a.measurement_timestamp
     , a.subjectid
     , b.acceleration_start_time
@@ -1220,7 +1344,7 @@ LEFT JOIN
     , b.prior_acc_end_time
     , b.first_peak as acceleration_first_peak
     , b.seconds_to_peak as acceleration_seconds_to_peak
-  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min` a
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table_pre` a
   CROSS JOIN `hca-data-sandbox.fetal_heartrate.rules_classify_4_acceleration` b
   WHERE a.subjectid = b.subjectid
   AND a.measurement_timestamp BETWEEN b.acceleration_start_time AND timestamp_add(b.acceleration_start_time, interval 60 minute)
@@ -1229,7 +1353,7 @@ LEFT JOIN
   AND a.subjectid = d.subjectid
 LEFT JOIN
 (
-  SELECT
+  SELECT distinct
       a.measurement_timestamp
     , a.subjectid
     , b.uterine_stimulation_start_time
@@ -1243,13 +1367,13 @@ LEFT JOIN
     , b.end_time_diff
     , b.type
     , b.seconds_overlap
-  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_2_variability_last_3_min` a
+  FROM `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table_pre` a
   CROSS JOIN `hca-data-sandbox.fetal_heartrate.rules_classify_4_uterine_stimulation` b
   WHERE a.subjectid = b.subjectid
   AND a.measurement_timestamp BETWEEN b.uterine_stimulation_start_time AND timestamp_add(b.uterine_stimulation_start_time, interval 60 minute)
 ) e
   ON a.measurement_timestamp = e.measurement_timestamp
   AND a.subjectid = e.subjectid
-GROUP BY 1,2,3,4,5,6,7
+GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14
 ;
 ```
