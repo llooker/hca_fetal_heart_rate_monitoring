@@ -3,8 +3,29 @@
 ##############################
 
 view: fhm_summary {
-  sql_table_name: `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table`
+  sql_table_name: `hca-cti-ds-hackathon.f4_fhm.rules_classify_5_summary_table`
     ;;
+    # {% if database_choice._parameter_value == 'hack' %}
+    #   `hca-cti-ds-hackathon.f4_fhm.rules_classify_5_summary_table`
+    # {% elsif database_choice._parameter_value == 'poc' %}
+    #   `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table`
+    # {% else %}
+    #   `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table`
+    # {% endif %}
+    # ;;
+
+parameter: database_choice {
+  type: unquoted
+  default_value: "hack"
+  allowed_value: {
+    label: "Hack"
+    value: "hack"
+  }
+  allowed_value: {
+    label: "POC"
+    value: "poc"
+  }
+}
 
 ######################
 ### Original Dimensions
