@@ -268,6 +268,21 @@ parameter: database_choice {
     sql: ${us_variability} ;;
     value_format_name: decimal_1
   }
+
+  measure: time_min {
+    type: date_time
+    sql: min(${measurement_timestamp_raw}) ;;
+  }
+
+  measure: time_max {
+    type: date_time
+    sql: max(${measurement_timestamp_raw}) ;;
+  }
+
+  measure: duration_min_max {
+    type: number
+    sql: timestamp_diff(cast(${time_max} as timestamp), cast(${time_min} as timestamp), minute) ;;
+  }
 }
 
 view: measurements_last_60_min {
