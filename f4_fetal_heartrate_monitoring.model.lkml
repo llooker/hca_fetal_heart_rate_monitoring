@@ -1,5 +1,5 @@
-# connection: "gcp_hca_poc"
-connection: "hca_hack_poc"
+connection: "gcp_hca_poc"
+# connection: "hca_hack_poc"
 # connection: "@{connection_string}"
 
 include: "/views/*.view.lkml"                # include all views in the views/ folder in this project

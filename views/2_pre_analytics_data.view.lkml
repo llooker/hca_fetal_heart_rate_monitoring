@@ -3,7 +3,7 @@
 ##############################
 
 view: fhm_summary {
-  sql_table_name: `hca-cti-ds-hackathon.f4_fhm.rules_classify_5_summary_table`
+  sql_table_name: `hca-data-sandbox.fetal_heartrate.rules_classify_5_summary_table`
     ;;
     # {% if database_choice._parameter_value == 'hack' %}
     #   `hca-cti-ds-hackathon.f4_fhm.rules_classify_5_summary_table`
